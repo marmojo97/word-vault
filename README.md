@@ -103,3 +103,4 @@ word-vault/
     └── lib/anthropic.js    # Claude calls
 ```
 # word-vault
+# word-vault
