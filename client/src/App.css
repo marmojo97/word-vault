@@ -670,3 +670,141 @@ input, textarea, select {
   border-radius: 999px;
   margin: 0 6px 6px 0;
 }
+
+/* === Search input === */
+.search-input {
+  width: 100%;
+  padding: 11px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.15s;
+  margin: 16px 0 4px;
+}
+.search-input:focus { border-color: var(--accent); }
+.search-input::placeholder { color: var(--text-muted); }
+
+.result-count {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 8px 2px;
+}
+
+/* === Desktop layout (>=900px) === */
+@media (min-width: 900px) {
+  html, body, #root { height: 100vh; overflow: hidden; }
+
+  .app {
+    max-width: none;
+    flex-direction: row;
+    height: 100vh;
+    min-height: 0;
+    border-left: none;
+    border-right: none;
+  }
+
+  /* Sidebar nav replaces bottom tab bar */
+  .tab-bar {
+    position: static;
+    max-width: none;
+    width: 240px;
+    flex-shrink: 0;
+    height: 100vh;
+    flex-direction: column;
+    justify-content: flex-start;
+    border-top: none;
+    border-right: 1px solid var(--border);
+    padding: 28px 14px;
+    gap: 4px;
+    margin: 0;
+  }
+
+  .tab-bar::before {
+    content: 'Word Vault';
+    display: block;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--accent);
+    padding: 0 14px 24px;
+    letter-spacing: -0.01em;
+  }
+
+  .tab-bar button {
+    flex: 0 0 auto;
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 14px;
+    padding: 11px 14px;
+    border-radius: 10px;
+    font-size: 14px;
+    color: var(--text);
+  }
+  .tab-bar button:hover { background: var(--bg); }
+  .tab-bar button.active {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .tab-bar .tab-icon {
+    font-size: 18px;
+    width: 20px;
+    text-align: center;
+  }
+
+  /* Content area */
+  .screen-container {
+    flex: 1;
+    padding: 44px 56px;
+    max-width: none;
+    overflow-y: auto;
+  }
+
+  .screen-fade {
+    max-width: 960px;
+    margin: 0 auto;
+  }
+
+  .screen-title { font-size: 32px; }
+
+  /* Stats fit in one row */
+  .stats-grid { grid-template-columns: repeat(4, 1fr); }
+
+  /* Vault becomes a grid of cards */
+  .vault-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+  }
+
+  /* Flashcard gets a little more room */
+  .flashcard-wrap {
+    height: 340px;
+    max-width: 520px;
+    margin: 22px auto;
+  }
+
+  /* Modal centers on desktop */
+  .modal-overlay {
+    align-items: center;
+    padding: 20px;
+  }
+  .modal {
+    max-width: 560px;
+    border-radius: 18px;
+    max-height: 82vh;
+  }
+
+  /* Toast in a corner instead of over the (missing) tab bar */
+  .toast {
+    bottom: 32px;
+    left: auto;
+    right: 32px;
+    transform: none;
+    animation: toastInDesktop 0.2s ease-out;
+  }
+  @keyframes toastInDesktop {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+}

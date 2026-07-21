@@ -31,6 +31,7 @@ export default function VaultScreen({ streak, showToast }) {
   const [allWords, setAllWords] = useState([]); // for top-stat counts
   const [filter, setFilter] = useState('all');
   const [sort, setSort] = useState('date');
+  const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
 
   // Detail / edit modal
@@ -142,6 +143,15 @@ export default function VaultScreen({ streak, showToast }) {
         </div>
       </div>
 
+      <input
+        type="search"
+        className="search-input"
+        placeholder="Search words, definitions, sources…"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        aria-label="Search vault"
+      />
+
       <div className="controls">
         {FILTERS.map((f) => (
           <button
@@ -162,13 +172,33 @@ export default function VaultScreen({ streak, showToast }) {
         </select>
       </div>
 
-      {loading && <div className="loading-block"><div className="spinner" /></div>}
-      {!loading && words.length === 0 && (
-        <div className="empty">No words match this filter.</div>
-      )}
+      {(() => {
+        const q = search.trim().toLowerCase();
+        const displayed = q
+          ? words.filter((w) =>
+              w.word.toLowerCase().includes(q) ||
+              w.definition.toLowerCase().includes(q) ||
+              (w.source && w.source.toLowerCase().includes(q)) ||
+              (w.example_sentence && w.example_sentence.toLowerCase().includes(q))
+            )
+          : words;
 
-      <div className="vault-list">
-        {words.map((w) => (
+        return (
+          <>
+            {!loading && (
+              <div className="result-count">
+                Showing {displayed.length} of {allWords.length} word{allWords.length === 1 ? '' : 's'}
+                {q && ` matching "${search.trim()}"`}
+              </div>
+            )}
+            {loading && <div className="loading-block"><div className="spinner" /></div>}
+            {!loading && displayed.length === 0 && (
+              <div className="empty">
+                {q ? `No words matching "${search.trim()}".` : 'No words match this filter.'}
+              </div>
+            )}
+            <div className="vault-list">
+              {displayed.map((w) => (
           <div
             key={w.id}
             className={'vault-row' + (w.mastery_score === 5 ? ' mastered' : '')}
@@ -192,7 +222,10 @@ export default function VaultScreen({ streak, showToast }) {
             {w.source && <span className="source-badge">{w.source}</span>}
           </div>
         ))}
-      </div>
+            </div>
+          </>
+        );
+      })()}
 
       {selected && !editing && (
         <Modal title={selected.word} onClose={closeDetail}>
