@@ -6,7 +6,7 @@ if (!apiKey) {
 }
 
 const client = new Anthropic({ apiKey });
-const MODEL = 'claude-sonnet-4-20250514';
+const MODEL = 'claude-haiku-4-5-20251001';
 
 const PARSE_SYSTEM_PROMPT = `You are a dictionary parser. The user will send you a screenshot of a word lookup — from a dictionary app, browser, book app, or any similar source. Extract the word, its part of speech, its primary definition, and one example sentence if present. Respond ONLY with a JSON object with keys: word, part_of_speech, definition, example_sentence. If a field is not present in the image, set it to null. Never include markdown, backticks, or any other text.`;
 
