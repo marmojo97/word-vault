@@ -93,42 +93,44 @@ export default function AddScreen({ showToast }) {
     e.target.value = '';
   }
 
-  async function saveItem(id) {
-    // Read the latest state via a functional update to avoid stale closures.
-    let current;
-    setItems((prev) => {
-      current = prev.find((i) => i.id === id);
-      return prev;
-    });
-    if (!current || !current.form) return false;
-    if (!current.form.word.trim() || !current.form.definition.trim()) {
-      showToast('Word and definition required');
-      return false;
+  // Core save routine: takes an item snapshot (not a state lookup) so it works
+  // reliably inside batch loops without React state timing issues.
+  async function saveOne(item) {
+    if (!item || !item.form) return { ok: false };
+    if (!item.form.word.trim() || !item.form.definition.trim()) {
+      return { ok: false, reason: 'validation' };
     }
-    updateItem(id, { status: 'saving' });
+    updateItem(item.id, { status: 'saving' });
     try {
-      await api.addWord(current.form);
-      updateItem(id, { status: 'saved' });
-      showToast(`Saved "${current.form.word}"`);
-      // Auto-clear saved cards after a beat
+      await api.addWord(item.form);
+      updateItem(item.id, { status: 'saved' });
       setTimeout(() => {
-        setItems((prev) => prev.filter((i) => i.id !== id));
+        setItems((prev) => prev.filter((i) => i.id !== item.id));
       }, 1400);
-      return true;
+      return { ok: true, word: item.form.word };
     } catch (err) {
-      updateItem(id, { status: 'ready' });
-      showToast('Save failed: ' + err.message);
-      return false;
+      updateItem(item.id, { status: 'ready' });
+      return { ok: false, error: err.message };
     }
+  }
+
+  async function saveItem(id) {
+    const item = items.find((i) => i.id === id);
+    const result = await saveOne(item);
+    if (result.ok) showToast(`Saved "${result.word}"`);
+    else if (result.reason === 'validation') showToast('Word and definition required');
+    else if (result.error) showToast('Save failed: ' + result.error);
   }
 
   async function saveAll() {
     const ready = items.filter((i) => i.status === 'ready');
-    // Serialize saves so the toast messages don't all overwrite each other
-    for (const item of ready) {
-      // eslint-disable-next-line no-await-in-loop
-      await saveItem(item.id);
-    }
+    if (ready.length === 0) return;
+    // Fire all inserts in parallel — the DB writes are fast; no Claude call here.
+    const results = await Promise.all(ready.map(saveOne));
+    const succeeded = results.filter((r) => r.ok).length;
+    const failed = results.length - succeeded;
+    if (failed === 0) showToast(`Saved all ${succeeded} words`);
+    else showToast(`Saved ${succeeded} of ${ready.length}, ${failed} failed`);
   }
 
   function retryItem(id) {
