@@ -692,6 +692,67 @@ input, textarea, select {
   margin: 8px 2px;
 }
 
+/* === Batch parse cards === */
+.batch-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 20px 0 6px;
+}
+
+.parse-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-top: 10px;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.parse-card.status-saved {
+  background: var(--green-soft);
+  border-color: var(--green-border);
+}
+
+.parse-card.status-error {
+  border-color: #FCA5A5;
+  background: #FEF2F2;
+}
+
+.parse-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.parse-card-title {
+  font-weight: 600;
+  font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.parse-card-remove {
+  color: var(--text-muted);
+  font-size: 22px;
+  line-height: 1;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+.parse-card-remove:hover {
+  color: var(--danger);
+  background: var(--bg);
+}
+
+.parse-card-status {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 10px;
+}
+
 /* === Desktop layout (>=900px) === */
 @media (min-width: 900px) {
   html, body, #root { height: 100vh; overflow: hidden; }

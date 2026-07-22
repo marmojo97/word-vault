@@ -23,68 +23,123 @@ function fileToDataUrl(file) {
   });
 }
 
+function newId() {
+  return (typeof crypto !== 'undefined' && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : Math.random().toString(36).slice(2);
+}
+
 export default function AddScreen({ showToast }) {
-  const [parsedForm, setParsedForm] = useState(null);
+  // Each item: { id, file, fileName, status, form, error }
+  // status: 'parsing' | 'ready' | 'saving' | 'saved' | 'error'
+  const [items, setItems] = useState([]);
   const [manualForm, setManualForm] = useState({ ...EMPTY_FORM });
-  const [parsing, setParsing] = useState(false);
-  const [savingParsed, setSavingParsed] = useState(false);
   const [savingManual, setSavingManual] = useState(false);
   const [dragging, setDragging] = useState(false);
   const fileRef = useRef(null);
 
-  async function handleFile(file) {
-    if (!file) return;
-    if (!file.type?.startsWith('image/')) {
-      showToast('Please drop an image');
-      return;
-    }
-    setParsing(true);
-    setParsedForm(null);
+  function updateItem(id, patch) {
+    setItems((prev) => prev.map((i) => (i.id === id ? { ...i, ...patch } : i)));
+  }
+
+  async function parseOne(item) {
     try {
-      const dataUrl = await fileToDataUrl(file);
-      const result = await api.parseScreenshot(dataUrl, file.type);
-      setParsedForm({
-        word: result.word ?? '',
-        part_of_speech: result.part_of_speech ?? '',
-        definition: result.definition ?? '',
-        example_sentence: result.example_sentence ?? '',
-        source: 'screenshot'
+      const dataUrl = await fileToDataUrl(item.file);
+      const result = await api.parseScreenshot(dataUrl, item.file.type);
+      updateItem(item.id, {
+        status: 'ready',
+        error: null,
+        form: {
+          word: result.word ?? '',
+          part_of_speech: result.part_of_speech ?? '',
+          definition: result.definition ?? '',
+          example_sentence: result.example_sentence ?? '',
+          source: 'screenshot'
+        }
       });
     } catch (err) {
-      showToast('Could not parse: ' + err.message);
-    } finally {
-      setParsing(false);
+      updateItem(item.id, { status: 'error', error: err.message });
     }
+  }
+
+  async function handleFiles(fileList) {
+    const files = Array.from(fileList || []).filter(
+      (f) => f.type && f.type.startsWith('image/')
+    );
+    if (files.length === 0) {
+      showToast('Please drop image files');
+      return;
+    }
+    const newItems = files.map((file) => ({
+      id: newId(),
+      file,
+      fileName: file.name,
+      status: 'parsing',
+      form: null,
+      error: null
+    }));
+    // Newest on top so long batches don't push the drop zone offscreen forever
+    setItems((prev) => [...newItems, ...prev]);
+    newItems.forEach(parseOne);
   }
 
   function onDrop(e) {
     e.preventDefault();
     setDragging(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file) handleFile(file);
+    handleFiles(e.dataTransfer.files);
   }
-
   function onPickFile(e) {
-    const file = e.target.files?.[0];
-    if (file) handleFile(file);
-    e.target.value = ''; // allow picking the same file again
+    handleFiles(e.target.files);
+    e.target.value = '';
   }
 
-  async function saveParsed() {
-    if (!parsedForm.word.trim() || !parsedForm.definition.trim()) {
+  async function saveItem(id) {
+    // Read the latest state via a functional update to avoid stale closures.
+    let current;
+    setItems((prev) => {
+      current = prev.find((i) => i.id === id);
+      return prev;
+    });
+    if (!current || !current.form) return false;
+    if (!current.form.word.trim() || !current.form.definition.trim()) {
       showToast('Word and definition required');
-      return;
+      return false;
     }
-    setSavingParsed(true);
+    updateItem(id, { status: 'saving' });
     try {
-      await api.addWord(parsedForm);
-      showToast('Word saved to your vault');
-      setParsedForm(null);
+      await api.addWord(current.form);
+      updateItem(id, { status: 'saved' });
+      showToast(`Saved "${current.form.word}"`);
+      // Auto-clear saved cards after a beat
+      setTimeout(() => {
+        setItems((prev) => prev.filter((i) => i.id !== id));
+      }, 1400);
+      return true;
     } catch (err) {
+      updateItem(id, { status: 'ready' });
       showToast('Save failed: ' + err.message);
-    } finally {
-      setSavingParsed(false);
+      return false;
     }
+  }
+
+  async function saveAll() {
+    const ready = items.filter((i) => i.status === 'ready');
+    // Serialize saves so the toast messages don't all overwrite each other
+    for (const item of ready) {
+      // eslint-disable-next-line no-await-in-loop
+      await saveItem(item.id);
+    }
+  }
+
+  function retryItem(id) {
+    const item = items.find((i) => i.id === id);
+    if (!item) return;
+    updateItem(id, { status: 'parsing', error: null });
+    parseOne(item);
+  }
+
+  function removeItem(id) {
+    setItems((prev) => prev.filter((i) => i.id !== id));
   }
 
   async function saveManual() {
@@ -95,7 +150,7 @@ export default function AddScreen({ showToast }) {
     setSavingManual(true);
     try {
       await api.addWord(manualForm);
-      showToast('Word saved to your vault');
+      showToast('Word saved');
       setManualForm({ ...EMPTY_FORM });
     } catch (err) {
       showToast('Save failed: ' + err.message);
@@ -103,6 +158,9 @@ export default function AddScreen({ showToast }) {
       setSavingManual(false);
     }
   }
+
+  const readyCount = items.filter((i) => i.status === 'ready').length;
+  const parsingCount = items.filter((i) => i.status === 'parsing').length;
 
   return (
     <div>
@@ -124,36 +182,43 @@ export default function AddScreen({ showToast }) {
         }}
       >
         <div className="icon" aria-hidden="true">📸</div>
-        <div className="label">Upload a screenshot</div>
-        <div className="hint">Claude reads it automatically</div>
+        <div className="label">Upload screenshots</div>
+        <div className="hint">Drop one or many — Claude reads them all</div>
         <input
           ref={fileRef}
           type="file"
           accept="image/*"
+          multiple
           hidden
           onChange={onPickFile}
         />
       </div>
 
-      {parsing && (
-        <div className="loading-block">
-          <div className="spinner" />
-          <div className="muted" style={{ marginTop: 10 }}>Reading your screenshot…</div>
-        </div>
-      )}
-
-      {parsedForm && !parsing && (
-        <div className="form" style={{ marginTop: 18 }}>
-          <div className="section-label">Confirm and save</div>
-          <WordFields form={parsedForm} setForm={setParsedForm} />
-          <button
-            className="btn primary full"
-            disabled={savingParsed}
-            onClick={saveParsed}
-          >
-            {savingParsed ? 'Saving…' : 'Save word'}
-          </button>
-        </div>
+      {items.length > 0 && (
+        <>
+          <div className="batch-header">
+            <div className="muted" style={{ fontSize: 13 }}>
+              {parsingCount > 0 && `Parsing ${parsingCount}… `}
+              {readyCount > 0 && `${readyCount} ready to save`}
+              {parsingCount === 0 && readyCount === 0 && `${items.length} item${items.length === 1 ? '' : 's'}`}
+            </div>
+            {readyCount > 1 && (
+              <button className="btn primary" onClick={saveAll}>
+                Save all ({readyCount})
+              </button>
+            )}
+          </div>
+          {items.map((item) => (
+            <ParseCard
+              key={item.id}
+              item={item}
+              onFormChange={(newForm) => updateItem(item.id, { form: newForm })}
+              onSave={() => saveItem(item.id)}
+              onRemove={() => removeItem(item.id)}
+              onRetry={() => retryItem(item.id)}
+            />
+          ))}
+        </>
       )}
 
       <div className="divider">or add manually</div>
@@ -172,8 +237,71 @@ export default function AddScreen({ showToast }) {
   );
 }
 
+function ParseCard({ item, onFormChange, onSave, onRemove, onRetry }) {
+  const { status, form, error, fileName } = item;
+  return (
+    <div className={'parse-card status-' + status}>
+      <div className="parse-card-header">
+        <div className="parse-card-title">
+          {status === 'saved' && <span style={{ color: 'var(--green)' }}>✓ </span>}
+          {form?.word || fileName || 'Screenshot'}
+        </div>
+        <button
+          className="parse-card-remove"
+          onClick={onRemove}
+          aria-label="Remove"
+        >
+          ×
+        </button>
+      </div>
+
+      {status === 'parsing' && (
+        <div className="parse-card-status">
+          <span
+            className="spinner"
+            style={{ width: 14, height: 14, borderWidth: 2, display: 'inline-block', verticalAlign: 'middle', margin: 0 }}
+          />
+          <span style={{ marginLeft: 8, verticalAlign: 'middle' }}>Reading screenshot…</span>
+        </div>
+      )}
+
+      {status === 'error' && (
+        <div className="parse-card-status" style={{ color: 'var(--danger)' }}>
+          Failed: {error}{' '}
+          <button
+            className="btn"
+            style={{ marginLeft: 8, padding: '4px 10px', fontSize: 12 }}
+            onClick={onRetry}
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
+      {(status === 'ready' || status === 'saving') && form && (
+        <div className="form" style={{ marginTop: 10 }}>
+          <WordFields form={form} setForm={onFormChange} />
+          <button
+            className="btn primary full"
+            onClick={onSave}
+            disabled={status === 'saving'}
+          >
+            {status === 'saving' ? 'Saving…' : 'Save word'}
+          </button>
+        </div>
+      )}
+
+      {status === 'saved' && (
+        <div className="parse-card-status" style={{ color: 'var(--green)' }}>
+          Saved to your vault
+        </div>
+      )}
+    </div>
+  );
+}
+
 function WordFields({ form, setForm }) {
-  const set = (key, val) => setForm((f) => ({ ...f, [key]: val }));
+  const set = (key, val) => setForm({ ...form, [key]: val });
   return (
     <>
       <div className="field">
