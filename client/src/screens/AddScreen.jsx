@@ -46,9 +46,20 @@ export default function AddScreen({ showToast }) {
     try {
       const dataUrl = await fileToDataUrl(item.file);
       const result = await api.parseScreenshot(dataUrl, item.file.type);
+
+      // Check if this word already exists in the vault
+      let duplicate = null;
+      if (result.word) {
+        try {
+          const check = await api.checkDuplicate(result.word);
+          if (check.exists) duplicate = check.existing;
+        } catch { /* non-fatal; skip warning if check fails */ }
+      }
+
       updateItem(item.id, {
         status: 'ready',
         error: null,
+        duplicate,
         form: {
           word: result.word ?? '',
           part_of_speech: result.part_of_speech ?? '',
@@ -240,9 +251,9 @@ export default function AddScreen({ showToast }) {
 }
 
 function ParseCard({ item, onFormChange, onSave, onRemove, onRetry }) {
-  const { status, form, error, fileName } = item;
+  const { status, form, error, fileName, duplicate } = item;
   return (
-    <div className={'parse-card status-' + status}>
+    <div className={'parse-card status-' + status + (duplicate ? ' has-dup' : '')}>
       <div className="parse-card-header">
         <div className="parse-card-title">
           {status === 'saved' && <span style={{ color: 'var(--green)' }}>✓ </span>}
@@ -256,6 +267,16 @@ function ParseCard({ item, onFormChange, onSave, onRemove, onRetry }) {
           ×
         </button>
       </div>
+
+      {duplicate && status !== 'saved' && (
+        <div className="dup-warning">
+          ⚠️ <strong>"{duplicate.word}"</strong> is already in your vault
+          <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+            Existing definition: {duplicate.definition.slice(0, 90)}
+            {duplicate.definition.length > 90 ? '…' : ''}
+          </div>
+        </div>
+      )}
 
       {status === 'parsing' && (
         <div className="parse-card-status">

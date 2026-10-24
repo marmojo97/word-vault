@@ -43,5 +43,15 @@ export const api = {
     req(`/words/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteWord: (id) => req(`/words/${id}`, { method: 'DELETE' }),
   moreExamples: (id) => req(`/words/${id}/examples`, { method: 'POST' }),
-  synonyms: (id) => req(`/words/${id}/synonyms`, { method: 'POST' })
+  synonyms: (id) => req(`/words/${id}/synonyms`, { method: 'POST' }),
+  checkDuplicate: (word) =>
+    req(`/words/check-duplicate?word=${encodeURIComponent(word)}`),
+  getContext: (id) => req(`/words/${id}/context`, { method: 'POST' }),
+  gradeDefinition: (id, definition) =>
+    req(`/words/${id}/grade`, {
+      method: 'POST',
+      body: JSON.stringify({ definition })
+    }),
+  importBackup: (data) =>
+    req('/words/import', { method: 'POST', body: JSON.stringify(data) })
 };

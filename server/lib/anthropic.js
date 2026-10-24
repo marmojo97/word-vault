@@ -6,7 +6,7 @@ if (!apiKey) {
 }
 
 const client = new Anthropic({ apiKey });
-const MODEL = 'claude-haiku-4-5-20251001';
+const MODEL = 'claude-sonnet-5';
 
 const PARSE_SYSTEM_PROMPT = `You are a dictionary parser. The user will send you a screenshot of a word lookup — from a dictionary app, browser, book app, or any similar source. Extract the word, its part of speech, its primary definition, and one example sentence if present. Respond ONLY with a JSON object with keys: word, part_of_speech, definition, example_sentence. If a field is not present in the image, set it to null. Never include markdown, backticks, or any other text.`;
 
@@ -103,4 +103,58 @@ export async function generateSynonyms(word, definition) {
   const arr = parseJsonLoose(extractText(message));
   if (!Array.isArray(arr)) throw new Error('Expected an array of synonyms');
   return arr.map(String);
+}
+
+/**
+ * Generate 2 natural context sentences for context-mode practice.
+ * Sentences SHOULD contain the word (so the student sees it in use),
+ * but should hint at the meaning through context rather than defining it directly.
+ */
+export async function generateContextSentences(word, definition) {
+  const message = await client.messages.create({
+    model: MODEL,
+    max_tokens: 500,
+    messages: [
+      {
+        role: 'user',
+        content: `Write exactly 2 natural sentences using the word "${word}" (meaning: ${definition}). Each sentence should feel like a real excerpt from a book, article, or conversation. The sentences should give enough context clues that an attentive reader could infer the meaning, but should NOT define the word directly. Vary the context across the two sentences. Return ONLY a JSON array of exactly 2 strings — no markdown, no backticks, no commentary.`
+      }
+    ]
+  });
+  const arr = parseJsonLoose(extractText(message));
+  if (!Array.isArray(arr) || arr.length === 0) {
+    throw new Error('Expected an array of sentences');
+  }
+  return arr.map(String);
+}
+
+/**
+ * Grade a user's definition against the correct one. Lenient grading —
+ * if the user captured the essential meaning, mark it correct even if
+ * the wording is loose.
+ */
+export async function gradeUserDefinition(word, correctDefinition, userDefinition) {
+  const message = await client.messages.create({
+    model: MODEL,
+    max_tokens: 300,
+    messages: [
+      {
+        role: 'user',
+        content: `A student is studying vocabulary. The word is "${word}". The dictionary definition is: "${correctDefinition}". The student wrote: "${userDefinition}".
+
+Judge whether the student's answer captures the essential meaning. They do NOT need to use the dictionary's exact wording. Be lenient — if they got the core concept right, mark it correct. Only mark incorrect if they clearly missed or mangled the meaning.
+
+Return ONLY a JSON object with keys:
+- "correct": boolean
+- "feedback": a brief 1-sentence explanation, warm and encouraging
+
+No markdown, no backticks, no commentary.`
+      }
+    ]
+  });
+  const parsed = parseJsonLoose(extractText(message));
+  return {
+    correct: !!parsed.correct,
+    feedback: String(parsed.feedback ?? '')
+  };
 }
