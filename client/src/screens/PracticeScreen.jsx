@@ -167,28 +167,38 @@ export default function PracticeScreen({ streak, showToast }) {
 function ContextMode({ card, onRate, submitting, showToast }) {
   const [sentences, setSentences] = useState(null);
   const [loadingCtx, setLoadingCtx] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [userDef, setUserDef] = useState('');
   const [grading, setGrading] = useState(false);
   const [feedback, setFeedback] = useState(null);
 
-  useEffect(() => {
+  function loadContext(cardId) {
     let cancelled = false;
     setSentences(null);
     setUserDef('');
     setFeedback(null);
+    setLoadError(null);
     setLoadingCtx(true);
     (async () => {
       try {
-        const data = await api.getContext(card.id);
-        if (!cancelled) setSentences(data.sentences);
+        const data = await api.getContext(cardId);
+        if (!cancelled) {
+          if (!Array.isArray(data.sentences) || data.sentences.length === 0) {
+            setLoadError('Got no sentences back from the server');
+          } else {
+            setSentences(data.sentences);
+          }
+        }
       } catch (err) {
-        if (!cancelled) showToast('Could not load context: ' + err.message);
+        if (!cancelled) setLoadError(err.message);
       } finally {
         if (!cancelled) setLoadingCtx(false);
       }
     })();
     return () => { cancelled = true; };
-  }, [card.id, showToast]);
+  }
+
+  useEffect(() => loadContext(card.id), [card.id]);
 
   async function submit() {
     const trimmed = userDef.trim();
@@ -220,7 +230,31 @@ function ContextMode({ card, onRate, submitting, showToast }) {
         </div>
       )}
 
-      {!loadingCtx && sentences && !feedback && (
+      {!loadingCtx && loadError && (
+        <div style={{ padding: '20px 4px' }}>
+          <div className="feedback-badge" style={{ color: 'var(--danger)' }}>
+            Could not generate context
+          </div>
+          <div className="feedback-text" style={{ marginTop: 8 }}>{loadError}</div>
+          <button
+            className="btn full"
+            style={{ marginTop: 14 }}
+            onClick={() => loadContext(card.id)}
+          >
+            Try again
+          </button>
+          <button
+            className="btn ghost full"
+            style={{ marginTop: 8 }}
+            onClick={() => onRate('review')}
+            disabled={submitting}
+          >
+            Skip this card
+          </button>
+        </div>
+      )}
+
+      {!loadingCtx && !loadError && sentences && !feedback && (
         <>
           <div className="section-label">In context</div>
           {sentences.map((s, i) => (
