@@ -35,8 +35,34 @@ export default function AddScreen({ showToast }) {
   const [items, setItems] = useState([]);
   const [manualForm, setManualForm] = useState({ ...EMPTY_FORM });
   const [savingManual, setSavingManual] = useState(false);
+  const [lookingUp, setLookingUp] = useState(false);
   const [dragging, setDragging] = useState(false);
   const fileRef = useRef(null);
+
+  async function handleLookup() {
+    const word = manualForm.word.trim();
+    if (!word || lookingUp) return;
+    setLookingUp(true);
+    try {
+      const result = await api.lookupWord(word);
+      if (!result.definition) {
+        showToast(`Could not find a definition for "${word}"`);
+      } else {
+        setManualForm((f) => ({
+          ...f,
+          word: result.word || f.word,
+          part_of_speech: result.part_of_speech || f.part_of_speech,
+          definition: result.definition,
+          example_sentence: result.example_sentence || f.example_sentence
+        }));
+        showToast(`Filled in "${word}"`);
+      }
+    } catch (err) {
+      showToast('Lookup failed: ' + err.message);
+    } finally {
+      setLookingUp(false);
+    }
+  }
 
   function updateItem(id, patch) {
     setItems((prev) => prev.map((i) => (i.id === id ? { ...i, ...patch } : i)));
@@ -237,7 +263,67 @@ export default function AddScreen({ showToast }) {
       <div className="divider">or add manually</div>
 
       <div className="form">
-        <WordFields form={manualForm} setForm={setManualForm} />
+        <div className="field">
+          <label>Word</label>
+          <div className="row" style={{ gap: 8 }}>
+            <input
+              value={manualForm.word}
+              onChange={(e) => setManualForm({ ...manualForm, word: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleLookup();
+                }
+              }}
+              placeholder="e.g. ephemeral"
+              style={{ flex: 1 }}
+            />
+            <button
+              type="button"
+              className="btn ghost"
+              onClick={handleLookup}
+              disabled={!manualForm.word.trim() || lookingUp}
+              style={{ whiteSpace: 'nowrap' }}
+              title="Autofill with Claude"
+            >
+              {lookingUp ? 'Looking up…' : '✨ Look up'}
+            </button>
+          </div>
+        </div>
+        <div className="field">
+          <label>Part of speech</label>
+          <select
+            value={manualForm.part_of_speech || ''}
+            onChange={(e) => setManualForm({ ...manualForm, part_of_speech: e.target.value })}
+          >
+            <option value="">—</option>
+            {PARTS_OF_SPEECH.map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+        </div>
+        <div className="field">
+          <label>Definition</label>
+          <textarea
+            value={manualForm.definition}
+            onChange={(e) => setManualForm({ ...manualForm, definition: e.target.value })}
+            placeholder="What does it mean?"
+          />
+        </div>
+        <div className="field">
+          <label>Example sentence</label>
+          <textarea
+            value={manualForm.example_sentence || ''}
+            onChange={(e) => setManualForm({ ...manualForm, example_sentence: e.target.value })}
+            placeholder="Optional"
+          />
+        </div>
+        <div className="field">
+          <label>Source</label>
+          <input
+            value={manualForm.source || ''}
+            onChange={(e) => setManualForm({ ...manualForm, source: e.target.value })}
+            placeholder="e.g. Pachinko, NYT, screenshot"
+          />
+        </div>
         <button
           className="btn primary full"
           disabled={savingManual}

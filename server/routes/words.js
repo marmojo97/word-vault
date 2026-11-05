@@ -5,7 +5,8 @@ import {
   generateMoreExamples,
   generateSynonyms,
   generateContextSentences,
-  gradeUserDefinition
+  gradeUserDefinition,
+  lookupWord
 } from '../lib/anthropic.js';
 
 const router = express.Router();
@@ -164,6 +165,22 @@ router.post('/', (req, res) => {
   );
   const row = db.prepare('SELECT * FROM words WHERE id = ?').get(info.lastInsertRowid);
   res.status(201).json(row);
+});
+
+/**
+ * POST /api/words/lookup — autofill from a bare word. Does NOT save.
+ * Body: { word: "..." }
+ */
+router.post('/lookup', async (req, res) => {
+  const word = String(req.body?.word ?? '').trim();
+  if (!word) return res.status(400).json({ error: 'word is required' });
+  try {
+    const result = await lookupWord(word);
+    res.json(result);
+  } catch (err) {
+    console.error('[lookup]', err);
+    res.status(500).json({ error: err.message ?? 'Failed to look up word' });
+  }
 });
 
 /**

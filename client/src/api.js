@@ -34,6 +34,8 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ image, media_type })
     }),
+  lookupWord: (word) =>
+    req('/words/lookup', { method: 'POST', body: JSON.stringify({ word }) }),
   rateMastery: (id, result) =>
     req(`/words/${id}/mastery`, {
       method: 'PATCH',

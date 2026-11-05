@@ -106,6 +106,28 @@ export async function generateSynonyms(word, definition) {
 }
 
 /**
+ * Look up a word from scratch (no screenshot) — fills in part of speech,
+ * definition, and one example sentence.
+ */
+export async function lookupWord(word) {
+  const message = await client.messages.create({
+    model: MODEL,
+    max_tokens: 500,
+    system: `You are a dictionary. Given a word, return its primary part of speech, a clear concise definition, and one natural example sentence that uses the word in context. Respond ONLY with a JSON object with keys: word, part_of_speech, definition, example_sentence. Preserve the user's spelling of the word. If the word isn't a real English word or you aren't confident, set definition to null. Never include markdown, backticks, or any other text.`,
+    messages: [
+      { role: 'user', content: `Look up: ${word}` }
+    ]
+  });
+  const parsed = parseJsonLoose(extractText(message));
+  return {
+    word: parsed.word ?? word,
+    part_of_speech: parsed.part_of_speech ?? null,
+    definition: parsed.definition ?? null,
+    example_sentence: parsed.example_sentence ?? null
+  };
+}
+
+/**
  * Generate 2 natural context sentences for context-mode practice.
  * Sentences SHOULD contain the word (so the student sees it in use),
  * but should hint at the meaning through context rather than defining it directly.
