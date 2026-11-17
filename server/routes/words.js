@@ -6,7 +6,8 @@ import {
   generateSynonyms,
   generateContextSentences,
   gradeUserDefinition,
-  lookupWord
+  lookupWord,
+  extractWordListFromImage
 } from '../lib/anthropic.js';
 
 const router = express.Router();
@@ -180,6 +181,23 @@ router.post('/lookup', async (req, res) => {
   } catch (err) {
     console.error('[lookup]', err);
     res.status(500).json({ error: err.message ?? 'Failed to look up word' });
+  }
+});
+
+/**
+ * POST /api/words/extract-list — extract just the words from a screenshot
+ * of a word list. Returns { words: [...] }. Each word is then looked up
+ * individually by the client via /api/words/lookup.
+ */
+router.post('/extract-list', async (req, res) => {
+  const { image, media_type } = req.body ?? {};
+  if (!image) return res.status(400).json({ error: 'image (base64 or data URL) is required' });
+  try {
+    const words = await extractWordListFromImage(image, media_type ?? 'image/png');
+    res.json({ words });
+  } catch (err) {
+    console.error('[extract-list]', err);
+    res.status(500).json({ error: err.message ?? 'Failed to extract word list' });
   }
 });
 

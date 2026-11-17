@@ -106,6 +106,41 @@ export async function generateSynonyms(word, definition) {
 }
 
 /**
+ * Extract a list of vocabulary words from a screenshot of a list (Kindle
+ * highlights, a vocab worksheet, notes app, etc.). Returns just the words —
+ * no definitions. Each word still needs to be looked up individually.
+ */
+export async function extractWordListFromImage(imageInput, mediaTypeHint = 'image/png') {
+  let mediaType = mediaTypeHint;
+  let data = imageInput;
+
+  const m = typeof data === 'string' && data.match(/^data:(image\/[a-zA-Z0-9+.-]+);base64,(.+)$/);
+  if (m) {
+    mediaType = m[1];
+    data = m[2];
+  }
+
+  const message = await client.messages.create({
+    model: MODEL,
+    max_tokens: 1500,
+    system: `You are a word-list extractor. The user will send you a screenshot of a list of vocabulary words — it could be Kindle highlights, a vocab worksheet, book notes, a page of highlighted terms, etc. Extract ONLY the headword/root term for each entry. Ignore definitions, sample sentences, page numbers, dates, and other metadata. If the same word appears multiple times, include it only once. Preserve the original spelling and capitalization. Return ONLY a JSON array of strings — no markdown, no backticks, no commentary.`,
+    messages: [
+      {
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: mediaType, data } },
+          { type: 'text', text: 'Extract the list of vocabulary words.' }
+        ]
+      }
+    ]
+  });
+
+  const arr = parseJsonLoose(extractText(message));
+  if (!Array.isArray(arr)) throw new Error('Expected an array of words');
+  return arr.map((w) => String(w).trim()).filter(Boolean);
+}
+
+/**
  * Look up a word from scratch (no screenshot) — fills in part of speech,
  * definition, and one example sentence.
  */

@@ -37,7 +37,10 @@ export default function AddScreen({ showToast }) {
   const [savingManual, setSavingManual] = useState(false);
   const [lookingUp, setLookingUp] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [listText, setListText] = useState('');
+  const [extractingList, setExtractingList] = useState(false);
   const fileRef = useRef(null);
+  const listFileRef = useRef(null);
 
   async function handleLookup() {
     const word = manualForm.word.trim();
@@ -174,7 +177,104 @@ export default function AddScreen({ showToast }) {
     const item = items.find((i) => i.id === id);
     if (!item) return;
     updateItem(id, { status: 'parsing', error: null });
-    parseOne(item);
+    if (item.kind === 'lookup') lookupOne(item);
+    else parseOne(item);
+  }
+
+  // Look up a bare word (no screenshot) and populate the parse card.
+  async function lookupOne(item) {
+    try {
+      const wordText = item.fileName;
+      const result = await api.lookupWord(wordText);
+      if (!result.definition) {
+        updateItem(item.id, {
+          status: 'error',
+          error: `No definition found for "${wordText}"`
+        });
+        return;
+      }
+
+      let duplicate = null;
+      try {
+        const check = await api.checkDuplicate(result.word || wordText);
+        if (check.exists) duplicate = check.existing;
+      } catch { /* non-fatal */ }
+
+      updateItem(item.id, {
+        status: 'ready',
+        error: null,
+        duplicate,
+        form: {
+          word: result.word || wordText,
+          part_of_speech: result.part_of_speech || '',
+          definition: result.definition,
+          example_sentence: result.example_sentence || '',
+          source: 'list'
+        }
+      });
+    } catch (err) {
+      updateItem(item.id, { status: 'error', error: err.message });
+    }
+  }
+
+  function startLookupBatch(words) {
+    const clean = words.map((w) => String(w).trim()).filter(Boolean);
+    const seen = new Set();
+    const unique = clean.filter((w) => {
+      const k = w.toLowerCase();
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+    if (unique.length === 0) return;
+    const newItems = unique.map((word) => ({
+      id: newId(),
+      file: null,
+      fileName: word,
+      status: 'parsing',
+      form: null,
+      error: null,
+      duplicate: null,
+      kind: 'lookup'
+    }));
+    setItems((prev) => [...newItems, ...prev]);
+    newItems.forEach(lookupOne);
+  }
+
+  function handleTextList() {
+    const words = listText.split(/[,;\n]+/);
+    const trimmed = words.map((w) => w.trim()).filter(Boolean);
+    if (trimmed.length === 0) {
+      showToast('Enter some words');
+      return;
+    }
+    setListText('');
+    startLookupBatch(trimmed);
+  }
+
+  async function handleListImage(e) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!file.type?.startsWith('image/')) {
+      showToast('Please pick an image');
+      return;
+    }
+    setExtractingList(true);
+    try {
+      const dataUrl = await fileToDataUrl(file);
+      const result = await api.extractWordList(dataUrl, file.type);
+      if (!result.words || result.words.length === 0) {
+        showToast('No words found in that image');
+        return;
+      }
+      showToast(`Found ${result.words.length} word${result.words.length === 1 ? '' : 's'}`);
+      startLookupBatch(result.words);
+    } catch (err) {
+      showToast('Could not extract list: ' + err.message);
+    } finally {
+      setExtractingList(false);
+    }
   }
 
   function removeItem(id) {
@@ -259,6 +359,47 @@ export default function AddScreen({ showToast }) {
           ))}
         </>
       )}
+
+      <div className="divider">or add a list of words</div>
+
+      <div className="form">
+        <div className="field">
+          <label>Paste a list</label>
+          <textarea
+            value={listText}
+            onChange={(e) => setListText(e.target.value)}
+            placeholder="ephemeral, sonder, petrichor&#10;or one per line"
+            rows={3}
+          />
+        </div>
+        <div className="row" style={{ gap: 8 }}>
+          <button
+            type="button"
+            className="btn primary"
+            style={{ flex: 1 }}
+            onClick={handleTextList}
+            disabled={!listText.trim()}
+          >
+            Add {listText.trim() ? `${listText.split(/[,;\n]+/).map((w) => w.trim()).filter(Boolean).length} ` : ''}from text
+          </button>
+          <button
+            type="button"
+            className="btn"
+            style={{ flex: 1 }}
+            onClick={() => listFileRef.current?.click()}
+            disabled={extractingList}
+          >
+            {extractingList ? 'Extracting…' : '📷 Screenshot of a list'}
+          </button>
+          <input
+            ref={listFileRef}
+            type="file"
+            accept="image/*"
+            hidden
+            onChange={handleListImage}
+          />
+        </div>
+      </div>
 
       <div className="divider">or add manually</div>
 
